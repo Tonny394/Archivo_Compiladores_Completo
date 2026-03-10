@@ -1,3 +1,8 @@
+#git add .
+#git commit -m "mensaje"
+#git push
+
+
 from html import parser
 from compilador import * 
 from tokens import *
