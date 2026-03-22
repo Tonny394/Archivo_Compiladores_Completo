@@ -59,11 +59,19 @@ class Parse:
         while self.obtener_token() and self.obtener_token()[1] != '}':
             if self.obtener_token()[1] == 'return':
                 instrucciones.append(self.retorno())
-            elif self.obtener_token()[1] == 'cout':   # <-- agregar esto
+            elif self.obtener_token()[1] == 'cout':
                 instrucciones.append(self.impresionPantalla())
+            elif self.obtener_token()[1] == 'if':
+                instrucciones.append(self.if_statement())
+            elif self.obtener_token()[1] == 'while':
+                instrucciones.append(self.while_statement())
+            elif self.obtener_token()[1] == 'for':
+                instrucciones.append(self.for_statement())
+            elif self.obtener_token()[1] in ['print', 'println']:
+                instrucciones.append(self.print_statement())
             else:
                 instrucciones.append(self.asignacion())
-        return instrucciones  # <-- aquí afuera
+        return instrucciones
 
     def asignacion(self):
         #Gramática pra la estructura de asignación
@@ -82,7 +90,7 @@ class Parse:
 
     def expresion(self):
         izquierda = self.termino()
-        while self.obtener_token() and self.obtener_token()[0] == "OPERATOR":
+        while self.obtener_token() and self.obtener_token()[0] == "OPERATOR" and self.obtener_token()[1] in ['+', '-', '*', '/', '==', '!=', '<', '>', '<=', '>=']:
             operador = self.coincidir("OPERATOR")
             derecha = self.termino()
             izquierda = NodoOperacion(izquierda, operador, derecha)
@@ -92,6 +100,8 @@ class Parse:
         token = self.obtener_token()
         if token and token[0] == "NUMBER":
             return NodoNumero(self.coincidir("NUMBER"))
+        elif token and token[0] == "STRING":
+            return NodoString(self.coincidir("STRING"))
         elif token and token[0] == "IDENTIFIER":
             identificador = self.coincidir("IDENTIFIER")
             if self.obtener_token() and self.obtener_token()[1] == "(":
@@ -105,20 +115,11 @@ class Parse:
             raise SyntaxError(f"Expresión no válida: {token}")
         
     def impresionPantalla(self):
-        keyword = self.coincidir("KEYWORD")  # consume 'cout'
-        self.coincidir("OPERATOR")           # consume '<<'
+        keyword = self.coincidir("KEYWORD")  # cout
+        self.coincidir("OPERATOR")           # <<
         expresion = self.expresion()
-        delimitador_apertura = self.coincidir("DELIMITER")
-        char_cierre = delimitador_apertura[1]
-
-        contenido = []
-        while self.obtener_token() and self.obtener_token()[1] != char_cierre: 
-            contenido.append(self.obtener_token()[1])
-            self.pos += 1
-
-        self.coincidir("DELIMITIER") #Consume cierre ' o "
-        self.coincidir("DELIMITIER") #Consume ;
-        return NodoInstruccion(keyword, [" ".join(contenido)])
+        self.coincidir("DELIMITER")          # ;
+        return NodoInstruccion(keyword, [expresion])
 
 
     def llamadaFuncion(self):
@@ -140,6 +141,61 @@ class Parse:
                 token = self.obtener_token()
                 sigue = True
             return argumentos
+
+    def expresion_asignacion(self):
+        nombre = self.coincidir('IDENTIFIER')
+        operador = self.coincidir('OPERATOR')  # =
+        expresion = self.expresion()
+        return NodoAsignacion(None, nombre, expresion)
+
+    def if_statement(self):
+        self.coincidir('KEYWORD')  # if
+        self.coincidir('DELIMITER')  # (
+        cond = self.expresion()
+        self.coincidir('DELIMITER')  # )
+        self.coincidir('DELIMITER')  # {
+        cuerpo_if = self.cuerpo()
+        self.coincidir('DELIMITER')  # }
+        cuerpo_else = None
+        if self.obtener_token() and self.obtener_token()[1] == 'else':
+            self.coincidir('KEYWORD')  # else
+            self.coincidir('DELIMITER')  # {
+            cuerpo_else = self.cuerpo()
+            self.coincidir('DELIMITER')  # }
+        return NodoIf(cond, cuerpo_if, cuerpo_else)
+
+    def while_statement(self):
+        self.coincidir('KEYWORD')  # while
+        self.coincidir('DELIMITER')  # (
+        cond = self.expresion()
+        self.coincidir('DELIMITER')  # )
+        self.coincidir('DELIMITER')  # {
+        cuerpo = self.cuerpo()
+        self.coincidir('DELIMITER')  # }
+        return NodoWhile(cond, cuerpo)
+
+    def for_statement(self):
+        self.coincidir('KEYWORD')  # for
+        self.coincidir('DELIMITER')  # (
+        init = self.expresion_asignacion()
+        self.coincidir('DELIMITER')  # ;
+        cond = self.expresion()
+        self.coincidir('DELIMITER')  # ;
+        incr = self.expresion_asignacion()
+        self.coincidir('DELIMITER')  # )
+        self.coincidir('DELIMITER')  # {
+        cuerpo = self.cuerpo()
+        self.coincidir('DELIMITER')  # }
+        return NodoFor(init, cond, incr, cuerpo)
+
+    def print_statement(self):
+        keyword = self.coincidir('KEYWORD')  # print or println
+        self.coincidir('DELIMITER')  # (
+        expr = self.expresion()
+        self.coincidir('DELIMITER')  # )
+        self.coincidir('DELIMITER')  # ;
+        newline = keyword[1] == 'println'
+        return NodoPrint(expr, newline)
 
 
 
@@ -166,11 +222,19 @@ def imprimir_ast(nodo):
           "tipo" : nodo.tipo[1]
       }
     elif(isinstance(nodo, NodoAsignacion)):
-      return {
-          "op" : nodo.operador[1],
-          "izq" : imprimir_ast(nodo.izquierda),
-          "der" : imprimir_ast(nodo.derecha)
-      }
+      if nodo.tipo:
+          return {
+              "tipo": "asignacion",
+              "tipo_var": nodo.tipo[1],
+              "nombre": nodo.nombre[1],
+              "expresion": imprimir_ast(nodo.expresion)
+          }
+      else:
+          return {
+              "tipo": "asignacion",
+              "nombre": nodo.nombre[1],
+              "expresion": imprimir_ast(nodo.expresion)
+          }
     elif isinstance(nodo, NodoOperacion):
       return {"Operacion" : nodo.operador,
               "Izquierda" : imprimir_ast(nodo.izquierda),
@@ -184,4 +248,32 @@ def imprimir_ast(nodo):
       return nodo.nombre[1]
     elif isinstance(nodo, NodoNumero):
       return int(nodo.valor[1]) if nodo.valor[1].isdigit() else nodo.valor[1]
+    elif isinstance(nodo, NodoString):
+      return nodo.valor[1]
+    elif isinstance(nodo, NodoIf):
+      return {
+          "tipo": "if",
+          "condicion": imprimir_ast(nodo.condicion),
+          "cuerpo_if": [imprimir_ast(c) for c in nodo.cuerpo_if],
+          "cuerpo_else": [imprimir_ast(c) for c in nodo.cuerpo_else] if nodo.cuerpo_else else None
+      }
+    elif isinstance(nodo, NodoWhile):
+      return {
+          "tipo": "while",
+          "condicion": imprimir_ast(nodo.condicion),
+          "cuerpo": [imprimir_ast(c) for c in nodo.cuerpo]
+      }
+    elif isinstance(nodo, NodoFor):
+      return {
+          "tipo": "for",
+          "init": imprimir_ast(nodo.init),
+          "cond": imprimir_ast(nodo.cond),
+          "incr": imprimir_ast(nodo.incr),
+          "cuerpo": [imprimir_ast(c) for c in nodo.cuerpo]
+      }
+    elif isinstance(nodo, NodoPrint):
+      return {
+          "tipo": "print" if not nodo.newline else "println",
+          "expresion": imprimir_ast(nodo.expresion)
+      }
     return {}
