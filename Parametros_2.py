@@ -137,7 +137,7 @@ class NodoRetorno(NodoAST):
     def traducirPy(self):
       return f"return {self.expresion.traducirPy()}"
     def traducirRuby(self):
-      return f"return {self.expresion.traducirPy()}"
+      return f"return {self.expresion.traducirRuby()}"
     
     def generarCodigo(self):
         return self.expresion.generarCodigo()
@@ -188,4 +188,7 @@ class NodoLlamadaFuncion():
     self.argumentos = argumentos
   def traducirPy(self):
     args = ", ".join(a.traducirPy() for a in self.argumentos)
+    return f"{self.nombre_funcion}({args})"
+  def traducirRuby(self):
+    args = ", ".join(a.traducirRuby() for a in self.argumentos)
     return f"{self.nombre_funcion}({args})"

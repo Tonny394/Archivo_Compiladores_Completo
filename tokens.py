@@ -70,7 +70,13 @@ class Parse:
             elif self.obtener_token()[1] in ['print', 'println']:
                 instrucciones.append(self.print_statement())
             else:
-                instrucciones.append(self.asignacion())
+                # Verificar si es una asignación con tipo o sin tipo
+                if self.obtener_token() and self.obtener_token()[0] == 'KEYWORD':
+                    # Es una asignación con tipo (int i = 0;)
+                    instrucciones.append(self.asignacion())
+                else:
+                    # Es una asignación sin tipo (i = i + 1;)
+                    instrucciones.append(self.expresion_asignacion())
         return instrucciones
 
     def asignacion(self):
@@ -146,6 +152,14 @@ class Parse:
         nombre = self.coincidir('IDENTIFIER')
         operador = self.coincidir('OPERATOR')  # =
         expresion = self.expresion()
+        self.coincidir('DELIMITER')  # ;
+        return NodoAsignacion(None, nombre, expresion)
+    
+    def expresion_asignacion_for(self):
+        """Expresión de asignación para el for (sin consumir ;)"""
+        nombre = self.coincidir('IDENTIFIER')
+        operador = self.coincidir('OPERATOR')  # =
+        expresion = self.expresion()
         return NodoAsignacion(None, nombre, expresion)
 
     def if_statement(self):
@@ -177,11 +191,11 @@ class Parse:
     def for_statement(self):
         self.coincidir('KEYWORD')  # for
         self.coincidir('DELIMITER')  # (
-        init = self.expresion_asignacion()
+        init = self.expresion_asignacion_for()
         self.coincidir('DELIMITER')  # ;
         cond = self.expresion()
         self.coincidir('DELIMITER')  # ;
-        incr = self.expresion_asignacion()
+        incr = self.expresion_asignacion_for()
         self.coincidir('DELIMITER')  # )
         self.coincidir('DELIMITER')  # {
         cuerpo = self.cuerpo()
@@ -275,5 +289,16 @@ def imprimir_ast(nodo):
       return {
           "tipo": "print" if not nodo.newline else "println",
           "expresion": imprimir_ast(nodo.expresion)
+      }
+    elif isinstance(nodo, NodoInstruccion):
+      return {
+          "tipo": nodo.tipo_instruccion[1],
+          "argumentos": [imprimir_ast(arg) for arg in nodo.argumentos_instruccion]
+      }
+    elif isinstance(nodo, NodoLlamadaFuncion):
+      return {
+          "tipo": "llamada_funcion",
+          "nombre": nodo.nombre_funcion,
+          "argumentos": [imprimir_ast(arg) for arg in nodo.argumentos]
       }
     return {}
