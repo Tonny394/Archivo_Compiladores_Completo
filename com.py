@@ -1,55 +1,41 @@
-#git add .
-#git commit -m "mensaje"
-#git push
+from compilador import *
+from tokens import * 
 
+codigoFuente = """
+int suma(int a, int b, int c){
+    return a + b;
+    cout << "1";
+}
 
-from html import parser
-from compilador import * 
-from tokens import *
+int main(){
+    int hola = 3;
+}
+"""
 
-def main():
-    #Ejemplo
-    codigo_fuente = """
-    int suma(int a, int b) {
-      return a + b;
-    }
-    """
+# Análisis léxico
+tokens = identificarTokens(codigoFuente)
 
-    #Ejemplo 2
-    codigo_fuenteDos = """
-    int suma(int a, int b) {
-      int c = a + b;
-      printf(c);
-      return c;
-    }
-    """
-    tokensDos = identificar_tokens(codigo_fuenteDos)
-    tokens = identificar_tokens(codigo_fuente) 
-    arbol_astDos = None
-  
-    #Prueba sintáctica
-    try:
-        print("Iniciando analisis sintactico")
-        parser = Parser(tokens)
-        arbol_ast = parser.parsear()
-        print("Analisis sintactico exitoso")
-    except SyntaxError as e:
-        print(f"Error sintáctico: {e}")
+print("========= Elementos ==========")
+for elemento in tokens:
+    print(f"{elemento}\n")
 
-    try:
-        print("Iniciando analisis sintactico")
-        parser = Parser(tokensDos)
-        arbol_astDos = parser.parsear()
-        print("Analisis sintactico exitoso")
-    except SyntaxError as e:
-        print(f"Error sintáctico: {e}")
+print("=======Analisis Sintactico ===========")
+# Análisis sintáctico
+try:
+    print("Iniciando analisis sintactico")
+    parser = Parse(tokens)
+    arbol_ast = parser.parsear()
+    print("Analisis sintactico exitoso")
 
+    # Imprimir el AST
     print(json.dumps(imprimir_ast(arbol_ast), indent=1))
-    
-    
-    nodoExp = NodoOperacion(NodoNumero(5),'+',NodoNumero(8))
-    print(json.dumps(imprimir_ast(nodoExp), indent=1))
-    if arbol_astDos:
-      print(arbol_astDos.traducirPy())
 
-main()
+    print("========= Traducciones ===============")
+    # Traducir a Python
+    print("========= Python ===============")
+    print(arbol_ast.traducirPy())
+    #Traducir a ruby 
+    print("========= Ruby ===============")
+    print(arbol_ast.traducirRuby())
+except SyntaxError as e:
+    print(f"Error sintáctico: {e}")

@@ -1,4 +1,4 @@
-from Parametros import *
+from Parametros_2 import *
 import json
 
 #Analizador sintáctico
