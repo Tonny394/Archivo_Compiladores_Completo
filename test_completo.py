@@ -56,4 +56,4 @@ try:
     print(arbol_ast.traducirRuby())
     
 except SyntaxError as e:
-    print(f"❌ Error sintáctico: {e}")
+    print(f" Error sintáctico: {e}")

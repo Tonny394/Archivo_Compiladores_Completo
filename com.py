@@ -37,5 +37,8 @@ try:
     #Traducir a ruby 
     print("========= Ruby ===============")
     print(arbol_ast.traducirRuby())
+    # Traducir a Assembler
+    print("========= Assembler ===============")
+    print(arbol_ast.generarCodigo())
 except SyntaxError as e:
     print(f"Error sintáctico: {e}")

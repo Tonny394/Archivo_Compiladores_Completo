@@ -5,7 +5,7 @@ class NodoAST:
         raise NotImplementedError("Método traducirPy() no implementado en este Nodo")
     def traducirRuby(self):
         raise NotImplementedError("Metodo traducirRuby() no implementado en este Nodo")
-    def generarCodigo():
+    def generarCodigo(self):
     #Traducción de c++ a Assembler
         raise NotImplementedError("Método generarCodigo() no implementado en este Nodo")
 
@@ -14,6 +14,14 @@ class NodoPrograma(NodoAST):
        self.variables = []
        self.funciones = funciones
        self.main = main
+
+    def generarCodigo(self):
+        codigo = ["section .text", "global _start", "extern printf"]
+        data = ["section .data", 'formato_d db "%d", 10, 0', 'formato_s db "%s", 10, 0', 'str1 db "1", 10, 0']
+        for funcion in self.funciones:
+            codigo.append(funcion.generarCodigo())
+        codigo.append(self.main.generarCodigo())
+        return "\n".join(codigo) + "\n\n" + "\n".join(data)
 
 class NodoFuncion(NodoAST):
     #Nodo que representa la funcion
@@ -32,6 +40,18 @@ class NodoFuncion(NodoAST):
       params = ", ".join(p.traducirRuby() for p in self.parametros)
       cuerpo = "\n  ".join(c.traducirRuby() for c in self.cuerpo)
       return f"def {self.nombre[1]}({params})\n  {cuerpo} \nend"
+    
+    def generarCodigo(self):
+        codigo = f"{self.nombre[1]}:\n"
+        for param in self.parametros:
+            # Asumir parámetros en pila o algo, pero simplificar
+            pass
+        codigo += "\n".join(c.generarCodigo() for c in self.cuerpo)
+        if self.nombre[1] == 'main':
+            codigo += "\n    mov eax, 1\n    int 0x80"  # exit
+        else:
+            codigo += "\n    ret"
+        return codigo
 
 class NodoParametro(NodoAST):
     def __init__(self, tipo, nombre):
@@ -54,6 +74,11 @@ class NodoAsignacion(NodoAST):
       return f"{self.nombre[1]} = {self.expresion.traducirPy()}"
     def traducirRuby(self):
       return f"{self.nombre[1]} = {self.expresion.traducirRuby()}"
+    
+    def generarCodigo(self):
+        codigo = self.expresion.generarCodigo()
+        codigo += f"\n    mov [{self.nombre[1]}], eax"
+        return codigo
 
 class NodoOperacion(NodoAST):
     def __init__(self, izquierda, operador, derecha):
@@ -65,6 +90,24 @@ class NodoOperacion(NodoAST):
       return f"{self.izquierda.traducirPy()} {self.operador[1]} {self.derecha.traducirPy()}"
     def traducirRuby(self):
       return f"{self.izquierda.traducirRuby()} {self.operador[1]} {self.derecha.traducirRuby()}"
+    
+    def generarCodigo(self):
+        codigo = []
+        codigo.append(self.izquierda.generarCodigo())
+        codigo.append("    push     eax")
+        codigo.append(self.derecha.generarCodigo())
+        codigo.append("    mov   ebx, eax")
+        codigo.append("    pop   eax")
+        if self.operador[1] == "+":
+            codigo.append("    add    eax, ebx")
+        elif self.operador[1] == "-":
+            codigo.append("    sub   eax, ebx")
+        elif self.operador[1] == "*":
+            codigo.append("    mul   eax, ebx")
+        elif self.operador[1] == "/":
+           codigo.append("    div   eax, ebx")
+
+        return "\n".join(codigo)
 
 class NodoRetorno(NodoAST):
     #Nodo para representar el retorno
@@ -75,6 +118,9 @@ class NodoRetorno(NodoAST):
       return f"return {self.expresion.traducirPy()}"
     def traducirRuby(self):
       return f"return {self.expresion.traducirRuby()}"
+    
+    def generarCodigo(self):
+        return self.expresion.generarCodigo()
 
 class NodoIdent(NodoAST):
     def __init__(self, nombre):
@@ -83,6 +129,9 @@ class NodoIdent(NodoAST):
       return self.nombre[1]
     def traducirRuby(self):
       return self.nombre[1]
+    
+    def generarCodigo(self):
+       return f"    mov   eax, {self.nombre[1]}"
 
 class NodoNumero(NodoAST):
     def __init__(self, valor):
@@ -91,6 +140,9 @@ class NodoNumero(NodoAST):
         return self.valor[1]
     def traducirRuby(self):
        return self.valor[1]
+    
+    def generarCodigo(self):
+       return f"    mov   eax, {self.valor[1]}"
     
 class NodoInstruccion(NodoAST):
     def __init__(self, tipo, argumentos):
@@ -106,6 +158,23 @@ class NodoInstruccion(NodoAST):
         if self.tipo_instruccion[1] == 'cout':
             args = ", ".join(a.traducirRuby() for a in self.argumentos_instruccion)
             return f"puts \"{args}\""
+        return ""
+       
+    def generarCodigo(self):
+        if self.tipo_instruccion[1] == 'cout':
+            arg = self.argumentos_instruccion[0]
+            codigo = arg.generarCodigo()
+            if isinstance(arg, NodoString):
+                formato = "formato_s"
+            else:
+                formato = "formato_d"
+            codigo += f"""
+    push eax
+    push {formato}
+    call printf
+    add esp, 8
+"""
+            return codigo
         return ""
        
 
@@ -127,6 +196,9 @@ class NodoString(NodoAST):
         return self.valor[1]
     def traducirRuby(self):
         return self.valor[1]
+    
+    def generarCodigo(self):
+        return "    mov   eax, str1"
 
 class NodoIf(NodoAST):
     def __init__(self, condicion, cuerpo_if, cuerpo_else=None):
