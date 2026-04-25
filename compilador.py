@@ -5,7 +5,7 @@ import re
 tokenPatron = {
     "KEYWORD": r'\b(if|else|while|for|return|int|float|void|cout|print|println)\b',
     "IDENTIFIER": r'\b[a-zA-Z_][a-zA-Z0-9_]*\b',
-    "NUMBER": r'\b\d+\b',
+    "NUMBER": r'\b\d+\.\d+\b|\b\d+\b',
     "STRING": r'\"[^\"]*\"|\'[^\']*\'',
     "OPERATOR": r'<<|==|!=|<=|>=|[+\-*/=<>]',
     "DELIMITER": r'[(),;{}]',

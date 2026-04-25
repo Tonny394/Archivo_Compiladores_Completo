@@ -1,44 +1,50 @@
 from compilador import *
-from tokens import * 
+from tokens import *
 
 codigoFuente = """
-int suma(int a, int b, int c){
-    return a + b;
-    cout << "1";
-}
-
 int main(){
-    int hola = 3;
+    float a = 3.5;
+    float b = 2.5;
+    float suma = a + b;
+    float multiplicacion = a * b;
+    float division = a / b;
+    print(suma);
+    print(multiplicacion);
+    print(division);
 }
 """
 
 # Análisis léxico
 tokens = identificarTokens(codigoFuente)
 
-print("========= Elementos ==========")
-for elemento in tokens:
-    print(f"{elemento}\n")
+print("========= ANALIZADOR CON SOPORTE DE COMA FLOTANTE ==========")
+print("\n Código fuente:")
+print(codigoFuente)
 
-print("=======Analisis Sintactico ===========")
+print(" Elementos léxicos:")
+for elemento in tokens:
+    print(f"{elemento}")
+
+print("\n Análisis sintáctico:")
 # Análisis sintáctico
 try:
-    print("Iniciando analisis sintactico")
+    print("Iniciando análisis sintáctico...")
     parser = Parse(tokens)
     arbol_ast = parser.parsear()
-    print("Analisis sintactico exitoso")
+    print(" Análisis sintáctico exitoso")
 
     # Imprimir el AST
-    print(json.dumps(imprimir_ast(arbol_ast), indent=1))
+    print("\n Árbol de Sintaxis Abstracta (AST):")
+    print(json.dumps(imprimir_ast(arbol_ast), indent=2))
 
-    print("========= Traducciones ===============")
+    print("\n========= TRADUCCIONES ==========")
     # Traducir a Python
-    print("========= Python ===============")
+    print(" Python:")
     print(arbol_ast.traducirPy())
-    #Traducir a ruby 
-    print("========= Ruby ===============")
+
+    # Traducir a Ruby
+    print("\n Ruby:")
     print(arbol_ast.traducirRuby())
-    # Traducir a Assembler
-    print("========= Assembler ===============")
-    print(arbol_ast.generarCodigo())
+
 except SyntaxError as e:
-    print(f"Error sintáctico: {e}")
+    print(f" Error sintáctico: {e}")

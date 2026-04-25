@@ -183,5 +183,11 @@ def imprimir_ast(nodo):
     elif isinstance(nodo, NodoIdent):
       return nodo.nombre[1]
     elif isinstance(nodo, NodoNumero):
-      return int(nodo.valor[1]) if nodo.valor[1].isdigit() else nodo.valor[1]
+      valor_str = nodo.valor[1]
+      if '.' in valor_str:
+        return float(valor_str)
+      elif valor_str.isdigit():
+        return int(valor_str)
+      else:
+        return valor_str
     return {}
