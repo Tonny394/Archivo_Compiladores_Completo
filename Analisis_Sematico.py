@@ -58,6 +58,9 @@ class AnalisisSemantico:
     def analizar_NodoPrint(self, nodo):
         self.analizar(nodo.expresion)
     
+    def analizar_NodoPrintln(self, nodo):
+        self.analizar(nodo.expresion)
+    
     def analizar_NodoIf(self, nodo):
         self.analizar(nodo.condicion)
         for instruccion in nodo.cuerpo_if:

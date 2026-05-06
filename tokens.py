@@ -208,8 +208,10 @@ class Parse:
         expr = self.expresion()
         self.coincidir('DELIMITER')  # )
         self.coincidir('DELIMITER')  # ;
-        newline = keyword[1] == 'println'
-        return NodoPrint(expr, newline)
+        if keyword[1] == 'print':
+            return NodoPrint(expr)
+        else:
+            return NodoPrintln(expr)
 
 
 

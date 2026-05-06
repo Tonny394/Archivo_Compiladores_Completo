@@ -200,6 +200,30 @@ class NodoString(NodoAST):
     def generarCodigo(self):
         return "    mov   eax, str1"
 
+class NodoPrint(NodoAST):
+    def __init__(self, expresion, newline=False):
+        self.expresion = expresion
+        self.newline = newline
+
+    def traducirPy(self):
+        if self.newline:
+            return f"print({self.expresion.traducirPy()})"
+        else:
+            return f"print({self.expresion.traducirPy()}, end='')"
+
+    def traducirRuby(self):
+        return f"puts {self.expresion.traducirRuby()}"
+
+class NodoPrintln(NodoAST):
+    def __init__(self, expresion):
+        self.expresion = expresion
+
+    def traducirPy(self):
+        return f"print({self.expresion.traducirPy()})"
+
+    def traducirRuby(self):
+        return f"puts {self.expresion.traducirRuby()}"
+
 class NodoIf(NodoAST):
     def __init__(self, condicion, cuerpo_if, cuerpo_else=None):
         self.condicion = condicion
