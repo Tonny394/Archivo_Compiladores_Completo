@@ -212,7 +212,10 @@ class NodoPrint(NodoAST):
             return f"print({self.expresion.traducirPy()}, end='')"
 
     def traducirRuby(self):
-        return f"puts {self.expresion.traducirRuby()}"
+        if self.newline:
+            return f"puts {self.expresion.traducirRuby()}"
+        else:
+            return f"print {self.expresion.traducirRuby()}"
 
 class NodoPrintln(NodoAST):
     def __init__(self, expresion):
@@ -275,20 +278,3 @@ class NodoFor(NodoAST):
         incr_py = self.incr.traducirRuby() if self.incr else ""
         cuerpo_py = "\n".join(f"    {c.traducirRuby()}" for c in self.cuerpo)
         return f"{init_py}\nwhile {cond_py}\n{cuerpo_py}\n    {incr_py}\nend"
-
-class NodoPrint(NodoAST):
-    def __init__(self, expresion, newline=False):
-        self.expresion = expresion
-        self.newline = newline
-
-    def traducirPy(self):
-        if self.newline:
-            return f"print({self.expresion.traducirPy()})"
-        else:
-            return f"print({self.expresion.traducirPy()}, end='')"
-
-    def traducirRuby(self):
-        if self.newline:
-            return f"puts {self.expresion.traducirRuby()}"
-        else:
-            return f"print {self.expresion.traducirRuby()}"
