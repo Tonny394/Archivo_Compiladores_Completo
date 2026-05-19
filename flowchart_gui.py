@@ -1,363 +1,809 @@
+import json
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox, simpledialog, Toplevel
+from tkinter import ttk
+from tkinter import messagebox, simpledialog
+
 from compilador import identificarTokens
 from tokens import Parse, imprimir_ast
-from Analisis_Sematico import AnalisisSemantico
-from Parametros import *
-import json
 
-class FlowchartNode:
-    counter = 0
-    
-    def __init__(self, canvas, x, y, node_type, text=""):
-        FlowchartNode.counter += 1
-        self.id_num = FlowchartNode.counter
-        self.canvas = canvas
-        self.node_type = node_type
-        self.text = text
-        self.x = x
-        self.y = y
-        self.width = 120
-        self.height = 60
-        self.id = None
-        self.text_id = None
+
+class FlowchartGUI(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Editor de Flowchart / Compilador")
+        self.geometry("1280x780")
+        self.minsize(1160, 700)
+        self.configure(bg="#f0f0f0")
+
+        self.nodes = {}
         self.connections = []
-        self.is_selected = False
-        self.draw()
-
-    def draw(self):
-        if self.node_type == "inicio":
-            self.id = self.canvas.create_oval(self.x - self.width//2, self.y - self.height//2,
-                                              self.x + self.width//2, self.y + self.height//2,
-                                              fill="lightgreen", width=2, outline="black")
-        elif self.node_type == "fin":
-            self.id = self.canvas.create_oval(self.x - self.width//2, self.y - self.height//2,
-                                              self.x + self.width//2, self.y + self.height//2,
-                                              fill="lightcoral", width=2, outline="black")
-        elif self.node_type == "proceso":
-            self.id = self.canvas.create_rectangle(self.x - self.width//2, self.y - self.height//2,
-                                                   self.x + self.width//2, self.y + self.height//2,
-                                                   fill="lightblue", width=2, outline="black")
-        elif self.node_type == "decision":
-            self.id = self.canvas.create_polygon(self.x, self.y - self.height//2,
-                                                 self.x - self.width//2, self.y,
-                                                 self.x, self.y + self.height//2,
-                                                 self.x + self.width//2, self.y,
-                                                 fill="lightyellow", width=2, outline="black")
-        
-        self.text_id = self.canvas.create_text(self.x, self.y, text=self.text, width=100, justify=tk.CENTER)
-
-    def move(self, dx, dy):
-        self.x += dx
-        self.y += dy
-        self.canvas.move(self.id, dx, dy)
-        self.canvas.move(self.text_id, dx, dy)
-        self.canvas.tag_raise(self.text_id)
-        self.update_connections()
-
-    def update_connections(self):
-        for conn_id, target_node in self.connections:
-            self.canvas.delete(conn_id)
-            new_conn = self.canvas.create_line(self.x, self.y, target_node.x, target_node.y,
-                                               arrows=tk.LAST, width=2, fill="black")
-            idx = self.connections.index((conn_id, target_node))
-            self.connections[idx] = (new_conn, target_node)
-
-    def connect_to(self, target_node):
-        conn = self.canvas.create_line(self.x, self.y, target_node.x, target_node.y,
-                                       arrows=tk.LAST, width=2, fill="black")
-        self.connections.append((conn, target_node))
-
-    def select(self):
-        self.is_selected = True
-        self.canvas.itemconfig(self.id, width=3, outline="red")
-
-    def deselect(self):
-        self.is_selected = False
-        self.canvas.itemconfig(self.id, width=2, outline="black")
-
-    def contains_point(self, x, y):
-        coords = self.canvas.coords(self.id)
-        return coords[0] <= x <= coords[2] and coords[1] <= y <= coords[3]
-
-    def set_text(self, text):
-        self.text = text
-        self.canvas.itemconfig(self.text_id, text=text)
-
-class FlowchartGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Constructor de Diagramas de Flujo - Compilador Integrado")
-        self.root.geometry("1600x900")
-
-        self.nodes = []
+        self.node_counter = 0
         self.selected_node = None
-        self.connecting_from = None
-        self.dragging = False
-        self.ast = None
-        self.tabla_simbolos = {}
+        self.selected_connection = None
+        self.connect_mode = False
+        self.connect_source = None
+        self.delete_node_mode = False
+        self.delete_connection_mode = False
+        self.drag_data = {"node_id": None, "x": 0, "y": 0}
 
-        # Toolbar principal
-        toolbar = tk.Frame(root, bg="lightgray", height=50)
-        toolbar.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
-
-        tk.Label(toolbar, text="Crear Nodo:", bg="lightgray", font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=5)
-        tk.Button(toolbar, text="Inicio", command=lambda: self.add_node("inicio"), bg="lightgreen").pack(side=tk.LEFT, padx=2)
-        tk.Button(toolbar, text="Fin", command=lambda: self.add_node("fin"), bg="lightcoral").pack(side=tk.LEFT, padx=2)
-        tk.Button(toolbar, text="Proceso", command=lambda: self.add_node("proceso"), bg="lightblue").pack(side=tk.LEFT, padx=2)
-        tk.Button(toolbar, text="Decision", command=lambda: self.add_node("decision"), bg="lightyellow").pack(side=tk.LEFT, padx=2)
-        
-        tk.Label(toolbar, text="|", bg="lightgray").pack(side=tk.LEFT, padx=5)
-        
-        tk.Button(toolbar, text="Conectar", command=self.start_connection, bg="lightyellow").pack(side=tk.LEFT, padx=2)
-        tk.Button(toolbar, text="Editar", command=self.edit_selected, bg="lightcyan").pack(side=tk.LEFT, padx=2)
-        tk.Button(toolbar, text="Eliminar", command=self.delete_selected, bg="lightpink").pack(side=tk.LEFT, padx=2)
-        
-        tk.Label(toolbar, text="|", bg="lightgray").pack(side=tk.LEFT, padx=5)
-        
-        tk.Button(toolbar, text="Generar y Analizar", command=self.generate_and_analyze, bg="lightgreen", font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=2)
-        tk.Button(toolbar, text="Limpiar", command=self.clear_canvas, bg="lightgray").pack(side=tk.LEFT, padx=2)
-
-        # Contenedor principal con canvas y panel de información
-        main_container = tk.Frame(root)
-        main_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Canvas para el diagrama
-        canvas_frame = tk.LabelFrame(main_container, text="Diagrama de Flujo", font=("Arial", 10, "bold"))
-        canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
-
-        self.canvas = tk.Canvas(canvas_frame, bg="white", cursor="crosshair")
-        self.canvas.pack(fill=tk.BOTH, expand=True)
-
-        self.canvas.bind("<Button-1>", self.on_canvas_click)
-        self.canvas.bind("<B1-Motion>", self.on_drag)
-        self.canvas.bind("<ButtonRelease-1>", self.on_release)
-        self.canvas.bind("<Button-3>", self.on_right_click)
-
-        # Panel de información con tabs
-        info_frame = tk.LabelFrame(main_container, text="Informacion de Analisis", font=("Arial", 10, "bold"))
-        info_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5)
-
-        self.notebook = ttk.Notebook(info_frame)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
-
-        # Tab: Código Fuente
-        self.code_tab = scrolledtext.ScrolledText(self.notebook, wrap=tk.WORD, height=10)
-        self.notebook.add(self.code_tab, text="Codigo Fuente")
-
-        # Tab: AST
-        self.ast_tab = scrolledtext.ScrolledText(self.notebook, wrap=tk.WORD, height=10)
-        self.notebook.add(self.ast_tab, text="AST")
-
-        # Tab: Tabla de Símbolos
-        self.symbols_tab = scrolledtext.ScrolledText(self.notebook, wrap=tk.WORD, height=10)
-        self.notebook.add(self.symbols_tab, text="Tabla de Simbolos")
-
-        # Tab: Python
-        self.python_tab = scrolledtext.ScrolledText(self.notebook, wrap=tk.WORD, height=10)
-        self.notebook.add(self.python_tab, text="Python")
-
-        # Tab: Ruby
-        self.ruby_tab = scrolledtext.ScrolledText(self.notebook, wrap=tk.WORD, height=10)
-        self.notebook.add(self.ruby_tab, text="Ruby")
-
-        # Mensajes de estado
-        self.status_label = tk.Label(root, text="Listo. Presione 'Generar y Analizar' para procesar el diagrama.", bg="lightgray")
-        self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
-
-    def add_node(self, node_type):
-        x = 300 + len(self.nodes) * 50
-        y = 200 + (len(self.nodes) % 3) * 100
-        
-        text_map = {
-            "inicio": "inicio",
-            "fin": "fin",
-            "proceso": "x = 5",
-            "decision": "x > 0"
+        self.shape_defaults = {
+            "Inicio/Fin": "main",
+            "Proceso": "x = x + 1",
+            "Decisión": "x > 0",
+            "Entrada/Salida": "printf(\"texto\");",
+            "Asignación": "int x = 0;",
+            "Función": "int sumar(int a, int b)",
+            "Llamada": "sumar(1, 2);",
+            "Ciclo": "x < 10",
+            "Comentario": "// Comentario",
+            "Conector": "Conector",
+            "Subproceso": "Subproceso",
         }
-        
-        node = FlowchartNode(self.canvas, x, y, node_type, text_map[node_type])
-        self.nodes.append(node)
-        self.status_label.config(text=f"Nodo '{node_type}' creado. Total de nodos: {len(self.nodes)}")
 
-    def start_connection(self):
-        if self.selected_node:
-            self.connecting_from = self.selected_node
-            self.status_label.config(text=f"Conectando desde: {self.connecting_from.text}. Haz clic en otro nodo para conectar.")
+        self._build_top_bar()
+        self._build_main_layout()
+
+    def _build_top_bar(self):
+        top_frame = tk.Frame(self, bg="#2c3e50", height=60)
+        top_frame.pack(side="top", fill="x")
+
+        title_label = tk.Label(
+            top_frame,
+            text="Compilador / Diseñador de Diagramas",
+            bg="#2c3e50",
+            fg="#ecf0f1",
+            font=("Segoe UI", 16, "bold"),
+        )
+        title_label.pack(side="left", padx=20, pady=12)
+
+        compile_button = ttk.Button(
+            top_frame,
+            text="Compilar",
+            command=self._compile_flowchart,
+        )
+        compile_button.pack(side="right", padx=20, pady=12)
+
+    def _build_main_layout(self):
+        content_frame = tk.Frame(self, bg="#f0f0f0")
+        content_frame.pack(side="top", fill="both", expand=True, padx=12, pady=12)
+
+        left_panel = tk.Frame(content_frame, bg="#34495e", width=260)
+        left_panel.pack(side="left", fill="y")
+
+        left_title = tk.Label(
+            left_panel,
+            text="Formas / Funciones",
+            bg="#34495e",
+            fg="#ecf0f1",
+            font=("Segoe UI", 12, "bold"),
+        )
+        left_title.pack(anchor="nw", padx=16, pady=(16, 8))
+
+        self._build_shape_buttons(left_panel)
+
+        tool_frame = tk.Frame(left_panel, bg="#34495e")
+        tool_frame.pack(fill="x", padx=16, pady=(12, 8))
+
+        connect_button = ttk.Button(tool_frame, text="Conectar", command=self._toggle_connect_mode)
+        connect_button.pack(fill="x", pady=4)
+
+        delete_button = ttk.Button(tool_frame, text="Eliminar nodo", command=self._toggle_delete_node_mode)
+        delete_button.pack(fill="x", pady=4)
+
+        delete_conn_button = ttk.Button(tool_frame, text="Eliminar conexión", command=self._toggle_delete_connection_mode)
+        delete_conn_button.pack(fill="x", pady=4)
+
+        clear_button = ttk.Button(tool_frame, text="Limpiar todo", command=self._clear_workspace)
+        clear_button.pack(fill="x", pady=4)
+
+        center_frame = tk.Frame(content_frame, bg="#f0f0f0")
+        center_frame.pack(side="left", fill="both", expand=True, padx=(12, 0))
+
+        canvas_frame = tk.Frame(center_frame, bg="#ffffff", bd=1, relief="solid")
+        canvas_frame.pack(fill="both", expand=True)
+
+        self.canvas = tk.Canvas(canvas_frame, bg="#ecf0f1", highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True, side="left")
+
+        scrollbar_y = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.canvas.yview)
+        scrollbar_y.pack(side="right", fill="y")
+        self.canvas.configure(yscrollcommand=scrollbar_y.set)
+
+        self.canvas.bind("<Button-1>", self._on_canvas_click)
+
+        self.code_frame = tk.Frame(center_frame, bg="#ffffff", bd=1, relief="solid")
+        self.code_frame.pack(fill="x", pady=(10, 0))
+
+        code_label = tk.Label(
+            self.code_frame,
+            text="Código generado",
+            bg="#ffffff",
+            fg="#2c3e50",
+            font=("Segoe UI", 11, "bold"),
+        )
+        code_label.pack(anchor="nw", padx=10, pady=(10, 6))
+
+        self.editor_text = tk.Text(
+            self.code_frame,
+            height=10,
+            bg="#f7f9fa",
+            fg="#2c3e50",
+            font=("Consolas", 11),
+            wrap="word",
+            bd=0,
+            padx=10,
+            pady=10,
+        )
+        self.editor_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        right_panel = tk.Frame(content_frame, bg="#f0f0f0", width=380)
+        right_panel.pack(side="right", fill="y", padx=(12, 0))
+
+        self._build_detail_panel(right_panel)
+        self._build_info_panel(
+            right_panel,
+            "Información del Código",
+            "Aquí se mostrará el análisis del flujo y la sintaxis generada.",
+            "code_info",
+        )
+        self._build_info_panel(
+            right_panel,
+            "Conversión al Código Diseñado",
+            "Aquí aparecerá la conversión automática al código de destino.",
+            "conversion_info",
+        )
+        self._build_info_panel(
+            right_panel,
+            "Información de Assembler",
+            "Aquí aparecerá la información generada para assembler.",
+            "assembler_info",
+        )
+
+        self.status_label = tk.Label(
+            self,
+            text="Selecciona un nodo o activa Conectar para unir dos nodos.",
+            bg="#ecf0f0",
+            fg="#2c3e50",
+            anchor="w",
+            padx=16,
+        )
+        self.status_label.pack(fill="x", side="bottom")
+
+    def _build_shape_buttons(self, parent):
+        categories = [
+            ("Estructura", ["Inicio/Fin", "Proceso", "Decisión", "Entrada/Salida"]),
+            ("Operaciones", ["Asignación", "Función", "Llamada", "Ciclo"]),
+            ("Utilidades", ["Comentario", "Conector", "Subproceso"]),
+        ]
+
+        for category, items in categories:
+            cat_label = tk.Label(
+                parent,
+                text=category,
+                bg="#34495e",
+                fg="#bdc3c7",
+                font=("Segoe UI", 10, "bold"),
+            )
+            cat_label.pack(anchor="nw", padx=16, pady=(12, 4))
+
+            for item in items:
+                btn = ttk.Button(
+                    parent,
+                    text=item,
+                    command=lambda text=item: self._add_node(text),
+                )
+                btn.pack(anchor="nw", fill="x", padx=16, pady=4)
+
+    def _build_detail_panel(self, parent):
+        frame = tk.Frame(parent, bg="#ffffff", bd=1, relief="solid")
+        frame.pack(fill="x", pady=8)
+
+        title_label = tk.Label(
+            frame,
+            text="Detalle del Bloque",
+            bg="#ffffff",
+            fg="#2c3e50",
+            font=("Segoe UI", 11, "bold"),
+        )
+        title_label.pack(anchor="nw", padx=12, pady=(12, 6))
+
+        self.detail_text = tk.Text(
+            frame,
+            height=6,
+            bg="#fbfbfb",
+            fg="#2c3e50",
+            font=("Consolas", 10),
+            wrap="word",
+            bd=0,
+            padx=8,
+            pady=8,
+        )
+        self.detail_text.insert("1.0", "Selecciona un bloque para ver sus detalles.")
+        self.detail_text.config(state="disabled")
+        self.detail_text.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+
+        actions_frame = tk.Frame(frame, bg="#ffffff")
+        actions_frame.pack(fill="x", padx=12, pady=(0, 12))
+
+        view_button = ttk.Button(actions_frame, text="Ver bloque", command=self._open_expanded_view_for_selected)
+        view_button.pack(side="left", expand=True, fill="x", padx=(0, 4))
+
+        edit_button = ttk.Button(actions_frame, text="Editar bloque", command=self._edit_selected_block)
+        edit_button.pack(side="left", expand=True, fill="x", padx=(4, 0))
+
+        self.detail_text_widget = self.detail_text
+
+    def _build_info_panel(self, parent, title, placeholder, attr_name):
+        frame = tk.Frame(parent, bg="#ffffff", bd=1, relief="solid")
+        frame.pack(fill="x", pady=8)
+
+        title_label = tk.Label(
+            frame,
+            text=title,
+            bg="#ffffff",
+            fg="#2c3e50",
+            font=("Segoe UI", 11, "bold"),
+        )
+        title_label.pack(anchor="nw", padx=12, pady=(12, 6))
+
+        text_widget = tk.Text(
+            frame,
+            height=8,
+            bg="#fbfbfb",
+            fg="#2c3e50",
+            font=("Consolas", 10),
+            wrap="word",
+            bd=0,
+            padx=8,
+            pady=8,
+        )
+        text_widget.insert("1.0", placeholder)
+        text_widget.config(state="disabled")
+        text_widget.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+
+        setattr(self, f"_{attr_name}_widget", text_widget)
+
+    def _add_node(self, shape_type):
+        x = 50 + (self.node_counter % 3) * 220
+        y = 50 + (self.node_counter // 3) * 140
+        label = self.shape_defaults.get(shape_type, shape_type)
+        self._create_node(shape_type, x, y, label)
+        self.node_counter += 1
+        self.status_label.config(text=f"Nodo '{shape_type}' agregado. Haz doble clic para editarlo.")
+
+    def _create_node(self, shape_type, x, y, label):
+        width = 180
+        height = 80
+        node_id = f"node{len(self.nodes) + 1}"
+
+        if shape_type == "Inicio/Fin":
+            shape_id = self.canvas.create_oval(x, y, x + width, y + height, fill="#ffffff", outline="#2c3e50", width=2)
+        elif shape_type == "Decisión":
+            shape_id = self.canvas.create_polygon(
+                x + width / 2, y,
+                x + width, y + height / 2,
+                x + width / 2, y + height,
+                x, y + height / 2,
+                fill="#ffffff",
+                outline="#2c3e50",
+                width=2,
+            )
+        elif shape_type == "Entrada/Salida":
+            shape_id = self.canvas.create_polygon(
+                x + 20, y,
+                x + width, y,
+                x + width - 20, y + height,
+                x, y + height,
+                fill="#ffffff",
+                outline="#2c3e50",
+                width=2,
+            )
+        elif shape_type == "Conector":
+            radius = min(width, height) / 4
+            shape_id = self.canvas.create_oval(
+                x + width / 2 - radius,
+                y + height / 2 - radius,
+                x + width / 2 + radius,
+                y + height / 2 + radius,
+                fill="#ffffff",
+                outline="#2c3e50",
+                width=2,
+            )
+        elif shape_type == "Subproceso":
+            shape_id = self.canvas.create_rectangle(x, y, x + width, y + height, fill="#ffffff", outline="#2c3e50", width=2, dash=(4, 4))
         else:
-            messagebox.showwarning("Advertencia", "Selecciona un nodo primero")
+            shape_id = self.canvas.create_rectangle(x, y, x + width, y + height, fill="#ffffff", outline="#2c3e50", width=2)
 
-    def edit_selected(self):
-        if self.selected_node:
-            new_text = simpledialog.askstring("Editar Nodo", "Nuevo texto:", initialvalue=self.selected_node.text)
-            if new_text:
-                self.selected_node.set_text(new_text)
-                self.status_label.config(text=f"Nodo editado: {new_text}")
-        else:
-            messagebox.showwarning("Advertencia", "Selecciona un nodo primero")
+        text_id = self.canvas.create_text(
+            x + width / 2,
+            y + height / 2 - 8,
+            text=label,
+            width=width - 20,
+            font=("Segoe UI", 10),
+            fill="#2c3e50",
+        )
 
-    def delete_selected(self):
-        if self.selected_node:
-            self.canvas.delete(self.selected_node.id)
-            self.canvas.delete(self.selected_node.text_id)
-            self.nodes.remove(self.selected_node)
-            self.selected_node = None
-            self.status_label.config(text=f"Nodo eliminado. Total de nodos: {len(self.nodes)}")
-        else:
-            messagebox.showwarning("Advertencia", "Selecciona un nodo primero")
+        button_width = 44
+        button_height = 20
+        button_x1 = x + width - button_width - 10
+        button_y1 = y + height - button_height - 8
+        button_x2 = button_x1 + button_width
+        button_y2 = button_y1 + button_height
 
-    def on_canvas_click(self, event):
-        # Si estamos conectando
-        if self.connecting_from:
-            for node in self.nodes:
-                if node.contains_point(event.x, event.y) and node != self.connecting_from:
-                    self.connecting_from.connect_to(node)
-                    self.status_label.config(text=f"Conectado: {self.connecting_from.text} -> {node.text}")
-                    self.connecting_from = None
-                    return
-            self.connecting_from = None
-        
-        # Si no estamos conectando, seleccionar nodo
-        for node in self.nodes:
-            node.deselect()
-        
-        for node in self.nodes:
-            if node.contains_point(event.x, event.y):
-                node.select()
-                self.selected_node = node
-                self.dragging = True
-                self.last_x = event.x
-                self.last_y = event.y
-                return
-        
-        self.selected_node = None
+        view_rect_id = self.canvas.create_rectangle(
+            button_x1,
+            button_y1,
+            button_x2,
+            button_y2,
+            fill="#2980b9",
+            outline="#1c5980",
+            width=1,
+            tags=(node_id, f"view-{node_id}"),
+        )
+        view_text_id = self.canvas.create_text(
+            (button_x1 + button_x2) / 2,
+            (button_y1 + button_y2) / 2,
+            text="VER",
+            fill="#ffffff",
+            font=("Segoe UI", 8, "bold"),
+            tags=(node_id, f"view-{node_id}"),
+        )
 
-    def on_drag(self, event):
-        if self.dragging and self.selected_node:
-            dx = event.x - getattr(self, 'last_x', event.x)
-            dy = event.y - getattr(self, 'last_y', event.y)
-            self.selected_node.move(dx, dy)
-            self.last_x = event.x
-            self.last_y = event.y
+        self.canvas.addtag_withtag(node_id, shape_id)
+        self.canvas.addtag_withtag(node_id, text_id)
+        self.canvas.addtag_withtag(node_id, view_rect_id)
+        self.canvas.addtag_withtag(node_id, view_text_id)
+        self.canvas.addtag_withtag("shape", shape_id)
+        self.canvas.addtag_withtag("shape", text_id)
+        self.canvas.addtag_withtag("shape", view_rect_id)
+        self.canvas.addtag_withtag("shape", view_text_id)
 
-    def on_release(self, event):
-        self.dragging = False
+        self.canvas.tag_bind(node_id, "<ButtonPress-1>", self._on_node_press)
+        self.canvas.tag_bind(node_id, "<B1-Motion>", self._on_node_motion)
+        self.canvas.tag_bind(node_id, "<ButtonRelease-1>", self._on_node_release)
+        self.canvas.tag_bind(node_id, "<Double-Button-1>", lambda event, nid=node_id: self._edit_node_text(nid))
 
-    def on_right_click(self, event):
-        for node in self.nodes:
-            if node.contains_point(event.x, event.y):
-                menu = tk.Menu(self.root, tearoff=0)
-                menu.add_command(label="Editar", command=lambda: self.quick_edit(node))
-                menu.add_command(label="Conectar", command=lambda: self.quick_connect(node))
-                menu.add_command(label="Eliminar", command=lambda: self.quick_delete(node))
-                menu.post(event.x_root, event.y_root)
-                return
+        self.nodes[node_id] = {
+            "shape_id": shape_id,
+            "text_id": text_id,
+            "view_rect_id": view_rect_id,
+            "view_text_id": view_text_id,
+            "type": shape_type,
+            "label": label,
+            "order": len(self.nodes),
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+        }
 
-    def quick_edit(self, node):
-        new_text = simpledialog.askstring("Editar Nodo", "Nuevo texto:", initialvalue=node.text)
-        if new_text:
-            node.set_text(new_text)
+    def _on_canvas_click(self, event):
+        if self.connect_mode or self.delete_node_mode or self.delete_connection_mode:
+            return
+        self._deselect_node()
 
-    def quick_connect(self, node):
-        self.connecting_from = node
-        self.status_label.config(text=f"Conectando desde: {node.text}. Haz clic en otro nodo.")
-
-    def quick_delete(self, node):
-        self.canvas.delete(node.id)
-        self.canvas.delete(node.text_id)
-        self.nodes.remove(node)
-        if self.selected_node == node:
-            self.selected_node = None
-        self.status_label.config(text=f"Nodo eliminado. Total: {len(self.nodes)}")
-
-    def generate_and_analyze(self):
-        if not self.nodes:
-            messagebox.showwarning("Advertencia", "No hay nodos para analizar")
+    def _on_node_press(self, event):
+        item = self.canvas.find_withtag("current")
+        if not item:
             return
 
-        try:
-            code = self.generate_code_from_diagram()
-            self.analyze_code(code)
-            self.status_label.config(text="Analisis completado exitosamente")
-        except Exception as e:
-            messagebox.showerror("Error", f"Error durante el analisis: {str(e)}")
-            self.status_label.config(text=f"Error: {str(e)}")
+        tags = self.canvas.gettags(item[0])
+        view_tag = next((t for t in tags if t.startswith("view-")), None)
+        conn_tag = next((t for t in tags if t == "connection"), None)
+        node_tag = next((t for t in tags if t.startswith("node")), None)
 
-    def generate_code_from_diagram(self):
-        code_lines = ["int main(){"]
-        
-        for node in self.nodes:
-            if node.node_type == "inicio":
-                pass
-            elif node.node_type == "fin":
-                pass
-            elif node.node_type == "proceso":
-                code_lines.append(f"    {node.text};")
-            elif node.node_type == "decision":
-                code_lines.append(f"    if ({node.text}) {{")
-                code_lines.append("    }")
-        
-        code_lines.append("}")
-        
-        return "\n".join(code_lines)
+        if conn_tag:
+            conn = next((c for c in self.connections if c["line_id"] == item[0]), None)
+            if conn:
+                self._select_connection(conn)
+            return
 
-    def analyze_code(self, code):
-        # Limpiar tabs
-        self.code_tab.config(state=tk.NORMAL)
-        self.code_tab.delete(1.0, tk.END)
-        self.code_tab.insert(tk.END, code)
-        self.code_tab.config(state=tk.DISABLED)
+        if view_tag and node_tag:
+            self._show_expanded_view(node_tag)
+            return
 
-        # Análisis léxico
-        tokens = identificarTokens(code)
+        if self.delete_node_mode and node_tag:
+            self._delete_node(node_tag)
+            return
 
-        # Análisis sintáctico
-        parser = Parse(tokens)
-        self.ast = parser.parsear()
+        if self.connect_mode and node_tag:
+            self._connect_nodes(node_tag)
+            return
 
-        # Mostrar AST
-        self.ast_tab.config(state=tk.NORMAL)
-        self.ast_tab.delete(1.0, tk.END)
-        ast_json = imprimir_ast(self.ast)
-        self.ast_tab.insert(tk.END, json.dumps(ast_json, indent=2))
-        self.ast_tab.config(state=tk.DISABLED)
+        if node_tag:
+            self._select_node(node_tag)
+            self.drag_data["node_id"] = node_tag
+            self.drag_data["x"] = event.x
+            self.drag_data["y"] = event.y
 
-        # Análisis semántico
-        try:
-            analizador_semantico = AnalisisSemantico()
-            analizador_semantico.analizar(self.ast)
-            self.tabla_simbolos = analizador_semantico.tabla_simbolos
+    def _on_node_motion(self, event):
+        node_id = self.drag_data["node_id"]
+        if not node_id or self.connect_mode:
+            return
 
-            self.symbols_tab.config(state=tk.NORMAL)
-            self.symbols_tab.delete(1.0, tk.END)
-            for simbolo, info in self.tabla_simbolos.items():
-                self.symbols_tab.insert(tk.END, f"{simbolo}: {info}\n")
-            self.symbols_tab.config(state=tk.DISABLED)
-        except Exception as e:
-            self.symbols_tab.config(state=tk.NORMAL)
-            self.symbols_tab.delete(1.0, tk.END)
-            self.symbols_tab.insert(tk.END, f"Error semantico: {str(e)}")
-            self.symbols_tab.config(state=tk.DISABLED)
+        dx = event.x - self.drag_data["x"]
+        dy = event.y - self.drag_data["y"]
+        self.canvas.move(node_id, dx, dy)
 
-        # Traducciones
-        self.python_tab.config(state=tk.NORMAL)
-        self.python_tab.delete(1.0, tk.END)
-        self.python_tab.insert(tk.END, self.ast.traducirPy())
-        self.python_tab.config(state=tk.DISABLED)
+        node = self.nodes[node_id]
+        node["x"] += dx
+        node["y"] += dy
+        self.drag_data["x"] = event.x
+        self.drag_data["y"] = event.y
 
-        self.ruby_tab.config(state=tk.NORMAL)
-        self.ruby_tab.delete(1.0, tk.END)
-        self.ruby_tab.insert(tk.END, self.ast.traducirRuby())
-        self.ruby_tab.config(state=tk.DISABLED)
+        self._update_connections(node_id)
 
-    def clear_canvas(self):
-        self.canvas.delete("all")
-        self.nodes = []
+    def _on_node_release(self, event):
+        self.drag_data["node_id"] = None
+
+    def _on_connection_click(self, event):
+        item = self.canvas.find_withtag("current")
+        if not item:
+            return
+        conn = next((c for c in self.connections if c["line_id"] == item[0]), None)
+        if not conn:
+            return
+
+        if self.delete_connection_mode:
+            self._delete_connection(conn)
+            return
+
+        self._select_connection(conn)
+
+    def _select_node(self, node_id):
+        self._deselect_connection()
+        self._deselect_node()
+        node = self.nodes.get(node_id)
+        if not node:
+            return
+
+        self.canvas.itemconfig(node["shape_id"], outline="#2980b9", width=3)
+        self.selected_node = node_id
+        self._update_detail_panel(node_id)
+        self.status_label.config(text=f"Nodo seleccionado: {node['type']} - {node['label']}")
+
+    def _deselect_node(self):
+        if not self.selected_node:
+            return
+        node = self.nodes.get(self.selected_node)
+        if node:
+            self.canvas.itemconfig(node["shape_id"], outline="#2c3e50", width=2)
         self.selected_node = None
-        self.connecting_from = None
-        self.status_label.config(text="Lienzo limpiado")
+        self._clear_detail_panel()
+        self.status_label.config(text="Selecciona un nodo o activa Conectar para unir dos nodos.")
+
+    def _select_connection(self, connection):
+        self._deselect_node()
+        self._deselect_connection()
+        self.selected_connection = connection
+        self.canvas.itemconfig(connection["line_id"], fill="#c0392b", width=3)
+        self.status_label.config(text=f"Conexión seleccionada: {connection['source']} → {connection['target']}")
+
+    def _deselect_connection(self):
+        if not self.selected_connection:
+            return
+        self.canvas.itemconfig(self.selected_connection["line_id"], fill="#34495e", width=2)
+        self.selected_connection = None
+
+    def _update_connections(self, node_id):
+        for conn in self.connections:
+            if conn["source"] == node_id or conn["target"] == node_id:
+                source = self.nodes[conn["source"]]
+                target = self.nodes[conn["target"]]
+                x1 = source["x"] + source["width"] / 2
+                y1 = source["y"] + source["height"]
+                x2 = target["x"] + target["width"] / 2
+                y2 = target["y"]
+                self.canvas.coords(conn["line_id"], x1, y1, x2, y2)
+
+    def _update_detail_panel(self, node_id):
+        node = self.nodes.get(node_id)
+        if not node:
+            return
+        detail = (
+            f"Tipo: {node['type']}\n"
+            f"Contenido: {node['label']}\n"
+            f"Posición: {int(node['x'])}, {int(node['y'])}\n"
+            f"Conexiones: {len([c for c in self.connections if c['source'] == node_id or c['target'] == node_id])}"
+        )
+        self.detail_text.config(state="normal")
+        self.detail_text.delete("1.0", "end")
+        self.detail_text.insert("1.0", detail)
+        self.detail_text.config(state="disabled")
+
+    def _clear_detail_panel(self):
+        self.detail_text.config(state="normal")
+        self.detail_text.delete("1.0", "end")
+        self.detail_text.insert("1.0", "Selecciona un bloque para ver sus detalles.")
+        self.detail_text.config(state="disabled")
+
+    def _update_info_widget(self, widget, text):
+        widget.config(state="normal")
+        widget.delete("1.0", "end")
+        widget.insert("1.0", text)
+        widget.config(state="disabled")
+
+    def _open_expanded_view_for_selected(self):
+        if not self.selected_node:
+            messagebox.showwarning("Atención", "Selecciona un bloque primero.")
+            return
+        self._show_expanded_view(self.selected_node)
+
+    def _edit_selected_block(self):
+        if not self.selected_node:
+            messagebox.showwarning("Atención", "Selecciona un bloque primero.")
+            return
+        self._edit_node_text(self.selected_node)
+
+    def _toggle_connect_mode(self):
+        self.connect_mode = not self.connect_mode
+        self.delete_node_mode = False
+        self.delete_connection_mode = False
+        self.connect_source = None
+        if self.connect_mode:
+            self.status_label.config(text="Modo conectar activado: haz clic en el nodo de origen.")
+        else:
+            self.status_label.config(text="Modo conectar desactivado.")
+
+    def _toggle_delete_node_mode(self):
+        self.delete_node_mode = not self.delete_node_mode
+        self.connect_mode = False
+        self.delete_connection_mode = False
+        self.connect_source = None
+        if self.delete_node_mode:
+            self.status_label.config(text="Modo eliminar nodo activado: haz clic en un nodo para borrar.")
+        else:
+            self.status_label.config(text="Modo eliminar nodo desactivado.")
+
+    def _toggle_delete_connection_mode(self):
+        self.delete_connection_mode = not self.delete_connection_mode
+        self.connect_mode = False
+        self.delete_node_mode = False
+        self.connect_source = None
+        if self.delete_connection_mode:
+            self.status_label.config(text="Modo eliminar conexión activado: haz clic en una conexión para borrar.")
+        else:
+            self.status_label.config(text="Modo eliminar conexión desactivado.")
+
+    def _connect_nodes(self, node_id):
+        if self.connect_source is None:
+            self.connect_source = node_id
+            self.status_label.config(text=f"Origen seleccionado: {self.nodes[node_id]['type']}. Selecciona el destino.")
+            return
+
+        if self.connect_source == node_id:
+            self.status_label.config(text="No puedes conectar un nodo consigo mismo. Selecciona otro nodo.")
+            return
+
+        source = self.nodes[self.connect_source]
+        target = self.nodes[node_id]
+
+        x1 = source["x"] + source["width"] / 2
+        y1 = source["y"] + source["height"]
+        x2 = target["x"] + target["width"] / 2
+        y2 = target["y"]
+
+        line_id = self.canvas.create_line(x1, y1, x2, y2, arrow="last", fill="#34495e", width=2, tags=("connection", f"conn{len(self.connections)+1}"))
+        self.canvas.tag_bind(line_id, "<Button-1>", self._on_connection_click)
+        self.connections.append({"source": self.connect_source, "target": node_id, "line_id": line_id})
+        self.status_label.config(text=f"Conectado {self.connect_source} → {node_id}.")
+        self.connect_source = None
+
+    def _edit_node_text(self, node_id):
+        node = self.nodes.get(node_id)
+        if not node:
+            return
+
+        new_text = simpledialog.askstring("Editar texto", "Ingresa el texto del nodo:", initialvalue=node["label"], parent=self)
+        if new_text is None:
+            return
+
+        self.canvas.itemconfig(node["text_id"], text=new_text)
+        node["label"] = new_text
+        if self.selected_node == node_id:
+            self.status_label.config(text=f"Nodo seleccionado: {node['type']} - {new_text}")
+            self._update_detail_panel(node_id)
+
+    def _show_expanded_view(self, node_id):
+        node = self.nodes.get(node_id)
+        if not node:
+            return
+
+        modal = tk.Toplevel(self)
+        modal.title(f"Bloque: {node['type']}")
+        modal.geometry("460x320")
+        modal.transient(self)
+        modal.grab_set()
+
+        title_label = tk.Label(modal, text=f"{node['type']} - Vista ampliada", font=("Segoe UI", 12, "bold"), bg="#f7f9fa", fg="#2c3e50")
+        title_label.pack(fill="x", padx=12, pady=(12, 8))
+
+        content_label = tk.Label(modal, text="Contenido del bloque:", font=("Segoe UI", 10), bg="#f7f9fa", fg="#2c3e50")
+        content_label.pack(anchor="w", padx=12, pady=(0, 4))
+
+        content_text = tk.Text(modal, height=10, bg="#ffffff", fg="#2c3e50", font=("Consolas", 11), wrap="word", bd=1, padx=10, pady=10)
+        content_text.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        content_text.insert("1.0", node["label"])
+
+        save_button = ttk.Button(modal, text="Guardar cambios", command=lambda: self._save_expanded_node(node_id, content_text, modal))
+        save_button.pack(side="right", padx=12, pady=(0, 12))
+
+    def _save_expanded_node(self, node_id, content_text, modal):
+        new_label = content_text.get("1.0", "end").strip()
+        if not new_label:
+            messagebox.showwarning("Atención", "El contenido no puede estar vacío.")
+            return
+
+        node = self.nodes.get(node_id)
+        if not node:
+            return
+
+        self.canvas.itemconfig(node["text_id"], text=new_label)
+        node["label"] = new_label
+        if self.selected_node == node_id:
+            self._update_detail_panel(node_id)
+            self.status_label.config(text=f"Nodo seleccionado: {node['type']} - {new_label}")
+        modal.destroy()
+
+    def _delete_selected_node(self):
+        if not self.selected_node:
+            messagebox.showwarning("Atención", "Selecciona primero un nodo para eliminar.")
+            return
+
+        self._delete_node(self.selected_node)
+
+    def _delete_selected_connection(self):
+        if not self.selected_connection:
+            messagebox.showwarning("Atención", "Selecciona primero una conexión para eliminar.")
+            return
+
+        self._delete_connection(self.selected_connection)
+
+    def _delete_node(self, node_id):
+        node = self.nodes.pop(node_id, None)
+        if not node:
+            return
+
+        self._deselect_node()
+        self.canvas.delete(node_id)
+        self.canvas.delete(node["shape_id"])
+        self.canvas.delete(node["text_id"])
+        self.canvas.delete(node["view_rect_id"])
+        self.canvas.delete(node["view_text_id"])
+
+        for conn in list(self.connections):
+            if conn["source"] == node_id or conn["target"] == node_id:
+                self.canvas.delete(conn["line_id"])
+                self.connections.remove(conn)
+
+        self.delete_node_mode = False
+        self.status_label.config(text="Nodo eliminado.")
+
+    def _delete_connection(self, connection):
+        self.canvas.delete(connection["line_id"])
+        self.connections = [c for c in self.connections if c["line_id"] != connection["line_id"]]
+        self.selected_connection = None
+        self.delete_connection_mode = False
+        self.status_label.config(text="Conexión eliminada.")
+
+    def _clear_workspace(self):
+        for node_id, node in list(self.nodes.items()):
+            self.canvas.delete(node_id)
+            self.canvas.delete(node["shape_id"])
+            self.canvas.delete(node["text_id"])
+            self.canvas.delete(node["view_rect_id"])
+            self.canvas.delete(node["view_text_id"])
+        self.nodes.clear()
+        self.node_counter = 0
+
+        for conn in self.connections:
+            self.canvas.delete(conn["line_id"])
+        self.connections.clear()
+
+        self.selected_node = None
+        self.selected_connection = None
+        self.editor_text.delete("1.0", "end")
+        self._clear_detail_panel()
+        self._update_info_widget(self._code_info_widget, "")
+        self._update_info_widget(self._conversion_info_widget, "")
+        self._update_info_widget(self._assembler_info_widget, "")
+        self.status_label.config(text="Workspace limpio.")
+
+    def _compile_flowchart(self):
+        if not self.nodes:
+            messagebox.showwarning("Atención", "No hay nodos en el diagrama. Agrega formas para crear código.")
+            return
+
+        source = self._generate_code_from_flowchart()
+        self.editor_text.delete("1.0", "end")
+        self.editor_text.insert("1.0", source)
+
+        try:
+            tokens = identificarTokens(source)
+            parser = Parse(tokens)
+            ast = parser.parsear()
+
+            lexical_info = [f"{tok[0]}: '{tok[1]}'" for tok in tokens]
+            code_info = (
+                f"Tokens encontrados: {len(tokens)}\n"
+                f"{', '.join(lexical_info)}\n\n"
+                f"AST:\n{json.dumps(imprimir_ast(ast), indent=2, ensure_ascii=False)}"
+            )
+            self._update_info_widget(self._code_info_widget, code_info)
+
+            conversion_info = (
+                f"Python:\n{ast.traducirPy()}\n\n"
+                f"Ruby:\n{ast.traducirRuby()}"
+            )
+            self._update_info_widget(self._conversion_info_widget, conversion_info)
+
+            try:
+                assembler_info = ast.generarCodigo()
+            except Exception:
+                assembler_info = "La generación de assembler no está disponible para este AST."
+            self._update_info_widget(self._assembler_info_widget, assembler_info)
+            self.status_label.config(text="Compilación completada.")
+            messagebox.showinfo("Compilación", "La compilación se ha ejecutado con éxito.")
+        except Exception as e:
+            self._update_info_widget(self._code_info_widget, f"Error: {e}")
+            self._update_info_widget(self._conversion_info_widget, "No se pudo generar la conversión.")
+            self._update_info_widget(self._assembler_info_widget, "No se pudo generar assembler.")
+            self.status_label.config(text="Error de compilación. Revisa el código generado.")
+            messagebox.showerror("Error de compilación", str(e))
+
+    def _generate_code_from_flowchart(self):
+        lines = ["int main() {"]
+        for node_id in sorted(self.nodes, key=lambda nid: (self.nodes[nid]["y"], self.nodes[nid]["x"])):
+            node = self.nodes[node_id]
+            label = node["label"].strip()
+            if node["type"] == "Inicio/Fin":
+                continue
+            elif node["type"] == "Proceso":
+                if not label.endswith(";"):
+                    label += ";"
+                lines.append(f"    {label}")
+            elif node["type"] == "Asignación":
+                if not label.endswith(";"):
+                    label += ";"
+                lines.append(f"    {label}")
+            elif node["type"] == "Decisión":
+                condition = label if label else "condicion"
+                lines.append(f"    if ({condition}) {{")
+                lines.append("        // TODO: Completa el bloque IF")
+                lines.append("    }")
+            elif node["type"] == "Entrada/Salida":
+                if label.startswith("printf") or label.startswith("puts"):
+                    lines.append(f"    {label}")
+                else:
+                    lines.append(f"    printf(\"{label}\");")
+            elif node["type"] == "Función":
+                if not label.endswith(";"):
+                    lines.append(f"    // Función: {label}")
+                else:
+                    lines.append(f"    {label}")
+            elif node["type"] == "Llamada":
+                if not label.endswith(";"):
+                    label += ";"
+                lines.append(f"    {label}")
+            elif node["type"] == "Ciclo":
+                condition = label if label else "condicion"
+                lines.append(f"    while ({condition}) {{")
+                lines.append("        // TODO: Completa el ciclo")
+                lines.append("    }")
+            elif node["type"] == "Comentario":
+                lines.append(f"    // {label}")
+            elif node["type"] == "Conector":
+                lines.append(f"    // Conector: {label}")
+            elif node["type"] == "Subproceso":
+                lines.append(f"    // Subproceso: {label}")
+            else:
+                lines.append(f"    {label}")
+
+        lines.append("    return 0;")
+        lines.append("}")
+        return "\n".join(lines)
+
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = FlowchartGUI(root)
-    root.mainloop()
+    app = FlowchartGUI()
+    app.mainloop()

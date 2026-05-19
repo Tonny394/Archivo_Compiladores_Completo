@@ -3,13 +3,13 @@ import re
 # === Análisis léxico ===
 # Definir los patrones para los diferentes tipos de tokens
 tokenPatron = {
-    "KEYWORD": r'\b(if|else|while|for|return|int|float|void|cout|print|println)\b',
+    "STRING": r'"[^"]*"',
+    "KEYWORD": r'\b(if|else|while|return|int|float|void|puts|printf)\b',
     "IDENTIFIER": r'\b[a-zA-Z_][a-zA-Z0-9_]*\b',
-    "NUMBER": r'\b\d+\.\d+\b|\b\d+\b',
-    "STRING": r'\"[^\"]*\"|\'[^\']*\'',
-    "OPERATOR": r'<<|==|!=|<=|>=|[+\-*/=<>]',
-    "DELIMITER": r'[(),;{}]',
-    "WHITESPACE": r'\s+'
+    "NUMBER": r'\b\d+(\.\d+)?\b',
+    "OPERATOR": r'\+\+|--|<<|[+\-*/=<>]',
+    "DELIMITER": r'[(),;{}\'\"]',
+    "WHITESPACE": r'\s+',
 }
 
 def identificarTokens(texto):

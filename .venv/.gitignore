@@ -1,0 +1,37 @@
+# --- Entornos Virtuales ---
+.venv/
+venv/
+env/
+ENV/
+bin/
+lib/
+include/
+
+# --- Python (Archivos compilados) ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Distribución / Empaquetado ---
+dist/
+build/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Variables de Entorno (¡Importante para seguridad!) ---
+.env
+.flaskenv
+
+# --- Notebooks y Herramientas ---
+.ipynb_checkpoints
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+
+# --- Configuración de Editores (Opcional pero recomendado) ---
+.vscode/
+.idea/
+*.swp

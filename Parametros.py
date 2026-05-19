@@ -5,7 +5,7 @@ class NodoAST:
         raise NotImplementedError("Método traducirPy() no implementado en este Nodo")
     def traducirRuby(self):
         raise NotImplementedError("Metodo traducirRuby() no implementado en este Nodo")
-    def generarCodigo(self):
+    def generarCodigo():
     #Traducción de c++ a Assembler
         raise NotImplementedError("Método generarCodigo() no implementado en este Nodo")
 
@@ -14,14 +14,6 @@ class NodoPrograma(NodoAST):
        self.variables = []
        self.funciones = funciones
        self.main = main
-
-    def generarCodigo(self):
-        codigo = ["section .text", "global _start", "extern printf"]
-        data = ["section .data", 'formato_d db "%d", 10, 0', 'formato_s db "%s", 10, 0', 'str1 db "1", 10, 0']
-        for funcion in self.funciones:
-            codigo.append(funcion.generarCodigo())
-        codigo.append(self.main.generarCodigo())
-        return "\n".join(codigo) + "\n\n" + "\n".join(data)
 
 class NodoFuncion(NodoAST):
     #Nodo que representa la funcion
@@ -40,18 +32,6 @@ class NodoFuncion(NodoAST):
       params = ", ".join(p.traducirRuby() for p in self.parametros)
       cuerpo = "\n  ".join(c.traducirRuby() for c in self.cuerpo)
       return f"def {self.nombre[1]}({params})\n  {cuerpo} \nend"
-    
-    def generarCodigo(self):
-        codigo = f"{self.nombre[1]}:\n"
-        for param in self.parametros:
-            # Asumir parámetros en pila o algo, pero simplificar
-            pass
-        codigo += "\n".join(c.generarCodigo() for c in self.cuerpo)
-        if self.nombre[1] == 'main':
-            codigo += "\n    mov eax, 1\n    int 0x80"  # exit
-        else:
-            codigo += "\n    ret"
-        return codigo
 
 class NodoParametro(NodoAST):
     def __init__(self, tipo, nombre):
@@ -74,11 +54,6 @@ class NodoAsignacion(NodoAST):
       return f"{self.nombre[1]} = {self.expresion.traducirPy()}"
     def traducirRuby(self):
       return f"{self.nombre[1]} = {self.expresion.traducirRuby()}"
-    
-    def generarCodigo(self):
-        codigo = self.expresion.generarCodigo()
-        codigo += f"\n    mov [{self.nombre[1]}], eax"
-        return codigo
 
 class NodoOperacion(NodoAST):
     def __init__(self, izquierda, operador, derecha):
@@ -90,24 +65,6 @@ class NodoOperacion(NodoAST):
       return f"{self.izquierda.traducirPy()} {self.operador[1]} {self.derecha.traducirPy()}"
     def traducirRuby(self):
       return f"{self.izquierda.traducirRuby()} {self.operador[1]} {self.derecha.traducirRuby()}"
-    
-    def generarCodigo(self):
-        codigo = []
-        codigo.append(self.izquierda.generarCodigo())
-        codigo.append("    push     eax")
-        codigo.append(self.derecha.generarCodigo())
-        codigo.append("    mov   ebx, eax")
-        codigo.append("    pop   eax")
-        if self.operador[1] == "+":
-            codigo.append("    add    eax, ebx")
-        elif self.operador[1] == "-":
-            codigo.append("    sub   eax, ebx")
-        elif self.operador[1] == "*":
-            codigo.append("    mul   eax, ebx")
-        elif self.operador[1] == "/":
-           codigo.append("    div   eax, ebx")
-
-        return "\n".join(codigo)
 
 class NodoRetorno(NodoAST):
     #Nodo para representar el retorno
@@ -117,10 +74,7 @@ class NodoRetorno(NodoAST):
     def traducirPy(self):
       return f"return {self.expresion.traducirPy()}"
     def traducirRuby(self):
-      return f"return {self.expresion.traducirRuby()}"
-    
-    def generarCodigo(self):
-        return self.expresion.generarCodigo()
+      return f"return {self.expresion.traducirPy()}"
 
 class NodoIdent(NodoAST):
     def __init__(self, nombre):
@@ -129,9 +83,6 @@ class NodoIdent(NodoAST):
       return self.nombre[1]
     def traducirRuby(self):
       return self.nombre[1]
-    
-    def generarCodigo(self):
-       return f"    mov   eax, {self.nombre[1]}"
 
 class NodoNumero(NodoAST):
     def __init__(self, valor):
@@ -140,9 +91,6 @@ class NodoNumero(NodoAST):
         return self.valor[1]
     def traducirRuby(self):
        return self.valor[1]
-    
-    def generarCodigo(self):
-       return f"    mov   eax, {self.valor[1]}"
     
 class NodoInstruccion(NodoAST):
     def __init__(self, tipo, argumentos):
@@ -160,23 +108,6 @@ class NodoInstruccion(NodoAST):
             return f"puts \"{args}\""
         return ""
        
-    def generarCodigo(self):
-        if self.tipo_instruccion[1] == 'cout':
-            arg = self.argumentos_instruccion[0]
-            codigo = arg.generarCodigo()
-            if isinstance(arg, NodoString):
-                formato = "formato_s"
-            else:
-                formato = "formato_d"
-            codigo += f"""
-    push eax
-    push {formato}
-    call printf
-    add esp, 8
-"""
-            return codigo
-        return ""
-       
 
 class NodoLlamadaFuncion():
   def __init__(self, nombref, argumentos):
@@ -185,96 +116,3 @@ class NodoLlamadaFuncion():
   def traducirPy(self):
     args = ", ".join(a.traducirPy() for a in self.argumentos)
     return f"{self.nombre_funcion}({args})"
-  def traducirRuby(self):
-    args = ", ".join(a.traducirRuby() for a in self.argumentos)
-    return f"{self.nombre_funcion}({args})"
-
-class NodoString(NodoAST):
-    def __init__(self, valor):
-        self.valor = valor
-    def traducirPy(self):
-        return self.valor[1]
-    def traducirRuby(self):
-        return self.valor[1]
-    
-    def generarCodigo(self):
-        return "    mov   eax, str1"
-
-class NodoPrint(NodoAST):
-    def __init__(self, expresion, newline=False):
-        self.expresion = expresion
-        self.newline = newline
-
-    def traducirPy(self):
-        if self.newline:
-            return f"print({self.expresion.traducirPy()})"
-        else:
-            return f"print({self.expresion.traducirPy()}, end='')"
-
-    def traducirRuby(self):
-        if self.newline:
-            return f"puts {self.expresion.traducirRuby()}"
-        else:
-            return f"print {self.expresion.traducirRuby()}"
-
-class NodoPrintln(NodoAST):
-    def __init__(self, expresion):
-        self.expresion = expresion
-
-    def traducirPy(self):
-        return f"print({self.expresion.traducirPy()})"
-
-    def traducirRuby(self):
-        return f"puts {self.expresion.traducirRuby()}"
-
-class NodoIf(NodoAST):
-    def __init__(self, condicion, cuerpo_if, cuerpo_else=None):
-        self.condicion = condicion
-        self.cuerpo_if = cuerpo_if
-        self.cuerpo_else = cuerpo_else
-
-    def traducirPy(self):
-        if_part = f"if {self.condicion.traducirPy()}:\n" + "\n".join(f"    {c.traducirPy()}" for c in self.cuerpo_if)
-        if self.cuerpo_else:
-            else_part = "\nelse:\n" + "\n".join(f"    {c.traducirPy()}" for c in self.cuerpo_else)
-            return if_part + else_part
-        return if_part
-
-    def traducirRuby(self):
-        if_part = f"if {self.condicion.traducirRuby()}\n" + "\n".join(f"    {c.traducirRuby()}" for c in self.cuerpo_if)
-        if self.cuerpo_else:
-            if_part += "\nelse\n" + "\n".join(f"    {c.traducirRuby()}" for c in self.cuerpo_else)
-        if_part += "\nend"
-        return if_part
-
-class NodoWhile(NodoAST):
-    def __init__(self, condicion, cuerpo):
-        self.condicion = condicion
-        self.cuerpo = cuerpo
-
-    def traducirPy(self):
-        return f"while {self.condicion.traducirPy()}:\n" + "\n".join(f"    {c.traducirPy()}" for c in self.cuerpo)
-
-    def traducirRuby(self):
-        return f"while {self.condicion.traducirRuby()}\n" + "\n".join(f"    {c.traducirRuby()}" for c in self.cuerpo) + "\nend"
-
-class NodoFor(NodoAST):
-    def __init__(self, init, cond, incr, cuerpo):
-        self.init = init
-        self.cond = cond
-        self.incr = incr
-        self.cuerpo = cuerpo
-
-    def traducirPy(self):
-        init_py = self.init.traducirPy() if self.init else ""
-        cond_py = self.cond.traducirPy()
-        incr_py = self.incr.traducirPy() if self.incr else ""
-        cuerpo_py = "\n".join(f"    {c.traducirPy()}" for c in self.cuerpo)
-        return f"{init_py}\nwhile {cond_py}:\n{cuerpo_py}\n    {incr_py}"
-
-    def traducirRuby(self):
-        init_py = self.init.traducirRuby() if self.init else ""
-        cond_py = self.cond.traducirRuby()
-        incr_py = self.incr.traducirRuby() if self.incr else ""
-        cuerpo_py = "\n".join(f"    {c.traducirRuby()}" for c in self.cuerpo)
-        return f"{init_py}\nwhile {cond_py}\n{cuerpo_py}\n    {incr_py}\nend"
